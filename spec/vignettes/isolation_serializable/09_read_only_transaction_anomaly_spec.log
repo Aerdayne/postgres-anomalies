@@ -1,0 +1,33 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(4.1ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id integer PRIMARY KEY,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id)
+    [observer]	);	(3.6ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(0.8ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 2) RETURNING "id"	(1.1ms)
+    [observer]	INSERT INTO "bookings" ("id", "customer_name", "seat_count", "event_id") VALUES (1, 'Alice', 1, 'event_a') RETURNING "id"	(1.0ms)
+    [observer]	INSERT INTO "bookings" ("id", "customer_name", "seat_count", "event_id") VALUES (2, 'Bob', 1, 'event_a') RETURNING "id"	(0.6ms)
+    [observer]	COMMIT	(0.9ms)
+       [alice]			BEGIN ISOLATION LEVEL SERIALIZABLE	(0.6ms)
+       [alice]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."id" = 1	(1.1ms)
+         [bob]		BEGIN ISOLATION LEVEL SERIALIZABLE	(2.8ms)
+         [bob]		SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(2.5ms)
+         [bob]		=> 2
+         [bob]		UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(1.9ms)
+         [bob]		COMMIT	(2.6ms)
+    [observer]	BEGIN ISOLATION LEVEL SERIALIZABLE	(2.6ms)
+    [observer]	SELECT "bookings"."customer_name", "bookings"."seat_count" FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob')	(5.8ms)
+    [observer]	=> [["Alice", 1], ["Bob", 2]]
+    [observer]	COMMIT	(1.2ms)
+       [alice]			COMMIT	(2.5ms)
+    [observer]	SELECT "bookings"."customer_name", "bookings"."seat_count" FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob')	(6.1ms)
+    [observer]	=> [["Alice", 2], ["Bob", 2]]
+    [observer]	DROP TABLE IF EXISTS bookings;	(9.5ms)
+    [observer]	DROP TABLE IF EXISTS events;	(11.7ms)

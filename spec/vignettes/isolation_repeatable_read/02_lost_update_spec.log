@@ -1,0 +1,36 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(1.9ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.1ms)
+    [observer]	BEGIN	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 2) RETURNING "id"	(2.6ms)
+    [observer]	COMMIT	(0.6ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.4ms)
+    [observer]	=> 2
+         [bob]		BEGIN ISOLATION LEVEL REPEATABLE READ	(0.3ms)
+         [bob]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.6ms)
+         [bob]		=> 2
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(0.8ms)
+       [alice]			SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.7ms)
+       [alice]			=> 2
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(0.9ms)
+         [bob]		UPDATE "events" SET "available_seats" = 1 WHERE "events"."id" = 'event_a'	(0.6ms)
+         [bob]		COMMIT	(0.7ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(0.6ms)
+       [alice]			UPDATE "events" SET "available_seats" = 1 WHERE "events"."id" = 'event_a'	(0.4ms)
+       [alice]			COMMIT	(0.6ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(2.1ms)
+    [observer]	=> 1
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(2.3ms)
+    [observer]	=> 2
+    [observer]	DROP TABLE IF EXISTS bookings;	(8.5ms)
+    [observer]	DROP TABLE IF EXISTS events;	(6.6ms)

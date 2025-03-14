@@ -1,0 +1,37 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(5.4ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(7.0ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(0.9ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(1.5ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(0.9ms)
+    [observer]	COMMIT	(1.2ms)
+       [alice]			SELECT pg_advisory_lock('2127939797')	(9.1ms)
+       [alice]			BEGIN ISOLATION LEVEL REPEATABLE READ	(1.8ms)
+       [alice]			SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(2.2ms)
+       [alice]			=> 2
+       [alice]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Alice' AND "bookings"."event_id" = 'event_a'	(2.0ms)
+       [alice]			COMMIT	(2.4ms)
+       [alice]			SELECT pg_advisory_unlock('2127939797')	(1.3ms)
+         [bob]		SELECT pg_advisory_lock('2127939797')	(1423.9ms)
+         [bob]		BEGIN ISOLATION LEVEL REPEATABLE READ	(1.8ms)
+         [bob]		SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(1.5ms)
+         [bob]		=> 3
+         [bob]		COMMIT	(1.0ms)
+         [bob]		SELECT pg_advisory_unlock('2127939797')	(1.3ms)
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Alice' AND "bookings"."event_id" = 'event_a'	(2.3ms)
+    [observer]	=> 2
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(2.5ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(9.3ms)
+    [observer]	DROP TABLE IF EXISTS events;	(4.3ms)

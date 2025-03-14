@@ -1,0 +1,37 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(5.6ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(5.7ms)
+    [observer]	BEGIN	(0.6ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 2) RETURNING "id"	(1.5ms)
+    [observer]	COMMIT	(0.7ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.5ms)
+    [observer]	=> 2
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.5ms)
+         [bob]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.6ms)
+         [bob]		=> 2
+       [alice]			BEGIN ISOLATION LEVEL REPEATABLE READ	(1.7ms)
+       [alice]			SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(1.5ms)
+       [alice]			=> 2
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(2.0ms)
+         [bob]		UPDATE "events" SET "available_seats" = 1 WHERE "events"."id" = 'event_a'	(1.0ms)
+         [bob]		COMMIT	(2.7ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(2.2ms)
+       [alice]			UPDATE "events" SET "available_seats" = 1 WHERE "events"."id" = 'event_a'	(2.5ms)
+       [alice]			ROLLBACK	(0.6ms)
+       [alice]			-> raised ActiveRecord::SerializationFailure PG::TRSerializationFailure: ERROR:  could not serialize access due to concurrent update
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(2.1ms)
+    [observer]	=> 1
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.5ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(8.3ms)
+    [observer]	DROP TABLE IF EXISTS events;	(5.7ms)

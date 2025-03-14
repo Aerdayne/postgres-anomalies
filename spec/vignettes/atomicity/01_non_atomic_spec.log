@@ -1,0 +1,13 @@
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.3ms)
+       [alice]		BEGIN	(2.6ms)
+       [alice]		INSERT INTO "bookings" ("customer_name", "seat_count") VALUES ('Alice', 1) RETURNING "id"	(5.3ms)
+       [alice]		COMMIT	(0.7ms)
+       [alice]		-> raised StandardError StandardError
+    [observer]	SELECT "bookings"."customer_name" FROM "bookings"	(3.9ms)
+    [observer]	=> ["Alice"]
+    [observer]	DROP TABLE IF EXISTS bookings;	(7.1ms)

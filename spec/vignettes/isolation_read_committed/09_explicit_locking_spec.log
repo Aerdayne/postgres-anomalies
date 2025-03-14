@@ -1,0 +1,37 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.2ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.2ms)
+    [observer]	BEGIN	(0.4ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(1.1ms)
+    [observer]	COMMIT	(1.0ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.7ms)
+    [observer]	=> 4
+       [alice]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.5ms)
+         [bob]			BEGIN ISOLATION LEVEL READ COMMITTED	(0.9ms)
+       [alice]		SELECT "events".* FROM "events" WHERE "events"."id" = 'event_a' FOR UPDATE	(5.4ms)
+       [alice]		SELECT "bookings"."id" FROM "bookings" WHERE "bookings"."customer_name" = 'Bob'	(1.4ms)
+       [alice]		=> []
+       [alice]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.4ms)
+       [alice]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(1.6ms)
+       [alice]		UPDATE "events" SET "available_seats" = 3 WHERE "events"."id" = 'event_a'	(3.2ms)
+       [alice]		COMMIT	(4.5ms)
+         [bob]			SELECT "events".* FROM "events" WHERE "events"."id" = 'event_a' FOR UPDATE	(1558.2ms)
+         [bob]			SELECT "bookings"."id" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice'	(3.4ms)
+         [bob]			=> ["f82bb68a-867b-4f23-a640-7ff9a81fe12f"]
+         [bob]			ROLLBACK	(2.2ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(5.0ms)
+    [observer]	=> 3
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(3.6ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(15.8ms)
+    [observer]	DROP TABLE IF EXISTS events;	(10.5ms)

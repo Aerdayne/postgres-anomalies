@@ -1,0 +1,52 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.3ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.5ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(0.4ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 3) RETURNING "id"	(0.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(0.8ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 2, 'event_a') RETURNING "id"	(0.5ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_b', 4) RETURNING "id"	(0.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_b') RETURNING "id"	(0.7ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 2, 'event_b') RETURNING "id"	(0.5ms)
+    [observer]	COMMIT	(0.5ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_b'	(0.4ms)
+    [observer]	=> 4
+       [alice]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.4ms)
+       [alice]		UPDATE "bookings" SET seat_count = seat_count - 1 WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_b'	(0.6ms)
+       [alice]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) + 1 WHERE "events"."id" = 'event_b'	(0.6ms)
+         [bob]			BEGIN ISOLATION LEVEL READ COMMITTED	(1.8ms)
+       [alice]		COMMIT	(14.8ms)
+         [bob]			UPDATE bookings SET seat_count = seat_count - 1
+         [bob]			WHERE bookings.id IN (
+         [bob]			  SELECT bookings.id
+         [bob]			  FROM bookings
+         [bob]			  WHERE bookings.customer_name = 'Bob'
+         [bob]			  AND bookings.event_id IN (
+         [bob]			    SELECT bookings.event_id
+         [bob]			    FROM bookings
+         [bob]			    WHERE bookings.customer_name IN ('Bob', 'Alice')
+         [bob]			    GROUP BY bookings.event_id
+         [bob]			    HAVING (SUM(seat_count) > 2)
+         [bob]			  )
+         [bob]			)
+         [bob]			RETURNING id, event_id	(1909.8ms)
+         [bob]			=> [{"id" => "d4347c15-a0bd-48f7-8938-48a436e9d345", "event_id" => "event_b"}, {"id" => "da6af3c3-083b-4fae-b53d-400de3b34975", "event_id" => "event_a"}]
+         [bob]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) + 1 WHERE "events"."id" = 'event_b'	(1.6ms)
+         [bob]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) + 1 WHERE "events"."id" = 'event_a'	(1.9ms)
+         [bob]			COMMIT	(2.3ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_b'	(3.1ms)
+    [observer]	=> 6
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."event_id" = 'event_b'	(4.1ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(6.9ms)
+    [observer]	DROP TABLE IF EXISTS events;	(5.3ms)

@@ -1,0 +1,32 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL,
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.7ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.2ms)
+    [observer]	BEGIN	(0.8ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 2) RETURNING "id"	(2.4ms)
+    [observer]	COMMIT	(0.9ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.5ms)
+    [observer]	=> 2
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+         [bob]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(0.9ms)
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(0.9ms)
+       [alice]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(3215.2ms)
+       [alice]			ROLLBACK	(0.7ms)
+       [alice]			-> raised Waitable::TimeoutExceeded Wait period has expired
+         [bob]		ROLLBACK	(0.5ms)
+         [bob]		-> raised Waitable::TimeoutExceeded Wait period has expired
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(6.1ms)
+    [observer]	=> 2
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.9ms)
+    [observer]	=> 0
+    [observer]	DROP TABLE IF EXISTS bookings;	(6.4ms)
+    [observer]	DROP TABLE IF EXISTS events;	(5.1ms)

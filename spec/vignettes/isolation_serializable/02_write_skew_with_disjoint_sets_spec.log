@@ -1,0 +1,40 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.3ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id integer PRIMARY KEY,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id)
+    [observer]	);	(3.7ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(0.9ms)
+    [observer]	INSERT INTO "bookings" ("id", "customer_name", "seat_count", "event_id") VALUES (1, 'Alice', 1, 'event_a') RETURNING "id"	(1.0ms)
+    [observer]	INSERT INTO "bookings" ("id", "customer_name", "seat_count", "event_id") VALUES (2, 'Bob', 1, 'event_a') RETURNING "id"	(0.4ms)
+    [observer]	COMMIT	(0.8ms)
+       [alice]		BEGIN ISOLATION LEVEL SERIALIZABLE	(0.4ms)
+       [alice]		SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."id" IN (1, 2)	(1.4ms)
+       [alice]		=> 2
+         [bob]			BEGIN ISOLATION LEVEL SERIALIZABLE	(0.4ms)
+         [bob]			SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(1.3ms)
+         [bob]			=> 2
+       [alice]		UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."id" = 1	(0.7ms)
+       [alice]		COMMIT	(0.6ms)
+         [bob]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(0.7ms)
+         [bob]			ROLLBACK	(0.4ms)
+         [bob]			-> raised ActiveRecord::SerializationFailure PG::TRSerializationFailure: ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+HINT:  The transaction might succeed if retried.
+         [bob]			BEGIN ISOLATION LEVEL SERIALIZABLE	(1.5ms)
+         [bob]			SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(1.0ms)
+         [bob]			=> 3
+         [bob]			COMMIT	(0.9ms)
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Alice' AND "bookings"."event_id" = 'event_a'	(4.7ms)
+    [observer]	=> 2
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(8.1ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(8.3ms)
+    [observer]	DROP TABLE IF EXISTS events;	(6.4ms)

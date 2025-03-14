@@ -1,0 +1,40 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.6ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.9ms)
+    [observer]	BEGIN	(0.5ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 2) RETURNING "id"	(1.7ms)
+    [observer]	COMMIT	(1.4ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.7ms)
+    [observer]	=> 2
+         [bob]		BEGIN ISOLATION LEVEL REPEATABLE READ	(0.5ms)
+         [bob]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.7ms)
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(0.8ms)
+       [alice]			BEGIN ISOLATION LEVEL REPEATABLE READ	(0.9ms)
+       [alice]			SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(1.4ms)
+       [alice]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(1.1ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.2ms)
+       [alice]			COMMIT	(0.9ms)
+         [bob]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(0.7ms)
+         [bob]		ROLLBACK	(0.5ms)
+         [bob]		-> raised ActiveRecord::SerializationFailure PG::TRSerializationFailure: ERROR:  could not serialize access due to concurrent update
+         [bob]		BEGIN ISOLATION LEVEL REPEATABLE READ	(0.5ms)
+         [bob]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.5ms)
+         [bob]		COMMIT	(0.4ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(2.1ms)
+    [observer]	=> 1
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.9ms)
+    [observer]	=> 1
+    [observer]	SELECT 1 AS one FROM "bookings" WHERE "bookings"."customer_name" = 'Bob' LIMIT 1	(1.2ms)
+    [observer]	=> false
+    [observer]	DROP TABLE IF EXISTS bookings;	(6.1ms)
+    [observer]	DROP TABLE IF EXISTS events;	(2.6ms)

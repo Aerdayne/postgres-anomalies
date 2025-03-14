@@ -1,0 +1,34 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL,
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.3ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.7ms)
+    [observer]	BEGIN	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 1) RETURNING "id"	(1.8ms)
+    [observer]	COMMIT	(0.8ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.9ms)
+    [observer]	=> 1
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.6ms)
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(0.9ms)
+         [bob]		SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a' LIMIT 1	(0.6ms)
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+       [alice]			SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a' LIMIT 1	(0.8ms)
+       [alice]			UPDATE "events" SET "available_seats" = 0 WHERE "events"."id" IS NULL	(0.5ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(0.8ms)
+       [alice]			COMMIT	(0.7ms)
+         [bob]		UPDATE "events" SET "available_seats" = 0 WHERE "events"."id" IS NULL	(0.5ms)
+         [bob]		COMMIT	(0.6ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(8.6ms)
+    [observer]	=> 1
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.0ms)
+    [observer]	=> 2
+    [observer]	DROP TABLE IF EXISTS bookings;	(3.6ms)
+    [observer]	DROP TABLE IF EXISTS events;	(2.3ms)

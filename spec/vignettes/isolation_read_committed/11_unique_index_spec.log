@@ -1,0 +1,36 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.4ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.4ms)
+    [observer]	CREATE UNIQUE INDEX index_bookings_one_per_customer ON bookings (customer_name, event_id)	(1.3ms)
+    [observer]	BEGIN	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(2.2ms)
+    [observer]	COMMIT	(0.7ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.5ms)
+    [observer]	=> 4
+[bob_session_a]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.5ms)
+[bob_session_b]			BEGIN ISOLATION LEVEL READ COMMITTED	(2.3ms)
+[bob_session_a]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(3.5ms)
+[bob_session_a]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(2.1ms)
+[bob_session_b]			INSERT INTO "bookings" ("customer_name","seat_count","event_id") VALUES ('Bob', 2, 'event_a') ON CONFLICT ("customer_name","event_id") DO UPDATE SET "seat_count" = "bookings"."seat_count" + 1 RETURNING CASE WHEN xmax != 0 THEN 'updated' ELSE 'inserted' END AS status;	(1558.2ms)
+[bob_session_a]		COMMIT	(6.1ms)
+[bob_session_b]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(3.1ms)
+[bob_session_b]			COMMIT	(2.9ms)
+    [observer]	SELECT COUNT(*) FROM "bookings" WHERE "bookings"."customer_name" = 'Bob'	(4.7ms)
+    [observer]	=> 1
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(4.6ms)
+    [observer]	=> 2
+    [observer]	SELECT "bookings".* FROM "bookings" WHERE "bookings"."customer_name" = 'Bob' ORDER BY "bookings"."id" ASC LIMIT 1	(3.5ms)
+    [observer]	=> 2
+    [observer]	DROP TABLE IF EXISTS bookings;	(8.3ms)
+    [observer]	DROP TABLE IF EXISTS events;	(5.4ms)
+    [observer]	DROP INDEX IF EXISTS index_bookings_one_per_customer;	(1.2ms)

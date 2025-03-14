@@ -1,0 +1,19 @@
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(4.1ms)
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.6ms)
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count") VALUES ('Bob', 1) RETURNING "id"	(0.9ms)
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(3.3ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count") VALUES ('Alice', 1) RETURNING "id"	(1.6ms)
+         [bob]		SELECT "bookings"."customer_name" FROM "bookings" WHERE "bookings"."customer_name" = 'Bob'	(1.3ms)
+         [bob]		=> ["Bob"]
+         [bob]		SELECT "bookings"."customer_name" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice'	(0.8ms)
+         [bob]		=> []
+         [bob]		COMMIT	(1.6ms)
+       [alice]			COMMIT	(1.1ms)
+    [observer]	SELECT "bookings"."customer_name" FROM "bookings"	(3.5ms)
+    [observer]	=> ["Bob", "Alice"]
+    [observer]	DROP TABLE IF EXISTS bookings;	(6.1ms)

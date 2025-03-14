@@ -1,0 +1,68 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(4.6ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(5.1ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(1.1ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 3) RETURNING "id"	(1.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.5ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 2, 'event_a') RETURNING "id"	(1.1ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_b', 4) RETURNING "id"	(1.3ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_b') RETURNING "id"	(1.1ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 2, 'event_b') RETURNING "id"	(1.4ms)
+    [observer]	COMMIT	(1.3ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_b'	(0.8ms)
+    [observer]	=> 4
+       [alice]		BEGIN ISOLATION LEVEL REPEATABLE READ	(0.8ms)
+       [alice]		UPDATE "bookings" SET seat_count = seat_count - 1 WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_b'	(1.4ms)
+       [alice]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) + 1 WHERE "events"."id" = 'event_b'	(1.0ms)
+         [bob]			BEGIN ISOLATION LEVEL REPEATABLE READ	(1.6ms)
+       [alice]		COMMIT	(4.1ms)
+         [bob]			UPDATE bookings SET seat_count = seat_count - 1
+         [bob]			WHERE bookings.id IN (
+         [bob]			  SELECT bookings.id
+         [bob]			  FROM bookings
+         [bob]			  WHERE bookings.customer_name = 'Bob'
+         [bob]			  AND bookings.event_id IN (
+         [bob]			    SELECT bookings.event_id
+         [bob]			    FROM bookings
+         [bob]			    WHERE bookings.customer_name IN ('Bob', 'Alice')
+         [bob]			    GROUP BY bookings.event_id
+         [bob]			    HAVING (SUM(seat_count) > 2)
+         [bob]			  )
+         [bob]			)
+         [bob]			RETURNING id, event_id	(1898.1ms)
+         [bob]			ROLLBACK	(0.9ms)
+         [bob]			-> raised ActiveRecord::SerializationFailure PG::TRSerializationFailure: ERROR:  could not serialize access due to concurrent update
+         [bob]			BEGIN ISOLATION LEVEL REPEATABLE READ	(1.0ms)
+         [bob]			UPDATE bookings SET seat_count = seat_count - 1
+         [bob]			WHERE bookings.id IN (
+         [bob]			  SELECT bookings.id
+         [bob]			  FROM bookings
+         [bob]			  WHERE bookings.customer_name = 'Bob'
+         [bob]			  AND bookings.event_id IN (
+         [bob]			    SELECT bookings.event_id
+         [bob]			    FROM bookings
+         [bob]			    WHERE bookings.customer_name IN ('Bob', 'Alice')
+         [bob]			    GROUP BY bookings.event_id
+         [bob]			    HAVING (SUM(seat_count) > 2)
+         [bob]			  )
+         [bob]			)
+         [bob]			RETURNING id, event_id	(4.2ms)
+         [bob]			=> [{"id" => "e5664e93-6a8c-4cf1-8c64-1d5375fd08a8", "event_id" => "event_a"}]
+         [bob]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) + 1 WHERE "events"."id" = 'event_a'	(3.8ms)
+         [bob]			COMMIT	(3.6ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_b'	(2.4ms)
+    [observer]	=> 5
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."event_id" = 'event_b'	(2.3ms)
+    [observer]	=> 2
+    [observer]	DROP TABLE IF EXISTS bookings;	(6.7ms)
+    [observer]	DROP TABLE IF EXISTS events;	(9.4ms)

@@ -1,0 +1,34 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.8ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.9ms)
+    [observer]	BEGIN	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 1) RETURNING "id"	(1.8ms)
+    [observer]	COMMIT	(0.9ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.7ms)
+    [observer]	=> 1
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.6ms)
+         [bob]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(1.7ms)
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(2.4ms)
+       [alice]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(1.6ms)
+       [alice]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.3ms)
+       [alice]			COMMIT	(1.0ms)
+         [bob]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(1.1ms)
+         [bob]		ROLLBACK	(0.7ms)
+         [bob]		-> raised ActiveRecord::StatementInvalid PG::CheckViolation: ERROR:  new row for relation "events" violates check constraint "events_available_seats_check"
+DETAIL:  Failing row contains (event_a, -1).
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(5.6ms)
+    [observer]	=> 0
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.4ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(7.4ms)
+    [observer]	DROP TABLE IF EXISTS events;	(8.7ms)

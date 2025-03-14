@@ -1,0 +1,41 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(6.4ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(5.9ms)
+    [observer]	BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(1.0ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(0.9ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(0.5ms)
+    [observer]	COMMIT	(0.6ms)
+       [alice]		BEGIN ISOLATION LEVEL SERIALIZABLE	(0.4ms)
+       [alice]		SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(0.9ms)
+       [alice]		=> 2
+         [bob]			BEGIN ISOLATION LEVEL SERIALIZABLE	(0.9ms)
+         [bob]			SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(1.2ms)
+         [bob]			=> 2
+       [alice]		UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Alice' AND "bookings"."event_id" = 'event_a'	(1.1ms)
+       [alice]		COMMIT	(1.1ms)
+         [bob]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(0.9ms)
+         [bob]			ROLLBACK	(0.5ms)
+         [bob]			-> raised ActiveRecord::SerializationFailure PG::TRSerializationFailure: ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+HINT:  The transaction might succeed if retried.
+         [bob]			BEGIN ISOLATION LEVEL SERIALIZABLE	(0.9ms)
+         [bob]			SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob') AND "bookings"."event_id" = 'event_a'	(0.9ms)
+         [bob]			=> 3
+         [bob]			COMMIT	(0.6ms)
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Alice' AND "bookings"."event_id" = 'event_a'	(6.0ms)
+    [observer]	=> 2
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" = 'Bob' AND "bookings"."event_id" = 'event_a'	(1.5ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(7.2ms)
+    [observer]	DROP TABLE IF EXISTS events;	(7.0ms)

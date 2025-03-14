@@ -1,0 +1,41 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.4ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  lock_version integer NOT NULL DEFAULT 0,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.6ms)
+    [observer]	BEGIN	(0.5ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 3) RETURNING "id"	(1.5ms)
+    [observer]	COMMIT	(0.8ms)
+    [observer]	BEGIN	(0.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id", "lock_version") VALUES ('Alice', 1, 'event_a', 0) RETURNING "id"	(1.6ms)
+    [observer]	COMMIT	(0.9ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.5ms)
+    [observer]	=> 3
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.4ms)
+         [bob]		SELECT "bookings"."id", "bookings"."seat_count", "bookings"."lock_version" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice' LIMIT 1	(0.6ms)
+         [bob]		=> [1, 0]
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(2.4ms)
+       [alice]			SELECT "bookings"."id", "bookings"."seat_count", "bookings"."lock_version" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice' LIMIT 1	(1.7ms)
+       [alice]			=> [1, 0]
+         [bob]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(2.2ms)
+         [bob]		UPDATE "bookings" SET "seat_count" = 2, "lock_version" = 1 WHERE "bookings"."id" = 'df604cdb-5dcd-4f59-be76-0a0b573938c2' AND "bookings"."lock_version" = 0	(0.9ms)
+         [bob]		COMMIT	(0.7ms)
+       [alice]			UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(0.7ms)
+       [alice]			UPDATE "bookings" SET "seat_count" = 2, "lock_version" = 1 WHERE "bookings"."id" = 'df604cdb-5dcd-4f59-be76-0a0b573938c2' AND "bookings"."lock_version" = 0	(0.4ms)
+       [alice]			ROLLBACK	(0.3ms)
+       [alice]			-> raised ActiveRecord::StaleObjectError Attempted to update a stale object: event_with_optimistic_locking.
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(2.1ms)
+    [observer]	=> 2
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.5ms)
+    [observer]	=> 2
+    [observer]	DROP TABLE IF EXISTS bookings;	(12.4ms)
+    [observer]	DROP TABLE IF EXISTS events;	(6.4ms)

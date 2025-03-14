@@ -1,0 +1,33 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(6.1ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(10.1ms)
+    [observer]	CREATE UNIQUE INDEX index_bookings_one_per_customer ON bookings (customer_name, event_id);	(2.2ms)
+    [observer]	BEGIN	(0.8ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 4) RETURNING "id"	(1.7ms)
+    [observer]	COMMIT	(1.0ms)
+    [observer]	SELECT "events"."available_seats" FROM "events" WHERE "events"."id" = 'event_a'	(0.9ms)
+    [observer]	=> 4
+[bob_session_a]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+[bob_session_b]			BEGIN ISOLATION LEVEL READ COMMITTED	(0.9ms)
+[bob_session_a]		INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(5.3ms)
+[bob_session_a]		UPDATE "events" SET "available_seats" = COALESCE("available_seats", 0) - 1 WHERE "events"."id" = 'event_a'	(2.1ms)
+[bob_session_a]		COMMIT	(10.0ms)
+[bob_session_b]			INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 1, 'event_a') RETURNING "id"	(1583.7ms)
+[bob_session_b]			ROLLBACK	(1.0ms)
+[bob_session_b]			-> raised ActiveRecord::RecordNotUnique PG::UniqueViolation: ERROR:  duplicate key value violates unique constraint "index_bookings_one_per_customer"
+DETAIL:  Key (customer_name, event_id)=(Bob, event_a) already exists.
+    [observer]	SELECT COUNT(*) FROM "bookings" WHERE "bookings"."customer_name" = 'Bob'	(4.2ms)
+    [observer]	=> 1
+    [observer]	DROP TABLE IF EXISTS bookings;	(7.7ms)
+    [observer]	DROP TABLE IF EXISTS events;	(5.3ms)
+    [observer]	DROP INDEX IF EXISTS index_bookings_one_per_customer;	(1.1ms)

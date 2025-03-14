@@ -1,0 +1,28 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.6ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.4ms)
+    [observer]	BEGIN	(0.8ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 3) RETURNING "id"	(1.9ms)
+    [observer]	COMMIT	(0.7ms)
+    [observer]	BEGIN	(0.7ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.7ms)
+    [observer]	COMMIT	(0.6ms)
+         [bob]		BEGIN ISOLATION LEVEL REPEATABLE READ	(0.4ms)
+         [bob]		SELECT "bookings"."seat_count" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice'	(0.6ms)
+         [bob]		=> [1]
+       [alice]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Alice'	(6.5ms)
+         [bob]		SELECT "bookings"."seat_count" FROM "bookings" WHERE "bookings"."customer_name" = 'Alice'	(2.2ms)
+         [bob]		=> [1]
+         [bob]		COMMIT	(1.8ms)
+    [observer]	DROP TABLE IF EXISTS bookings;	(29.0ms)
+    [observer]	DROP TABLE IF EXISTS events;	(2.6ms)

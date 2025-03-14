@@ -1,0 +1,34 @@
+    [observer]	CREATE TABLE events (
+    [observer]	  id text NOT NULL,
+    [observer]	  available_seats integer NOT NULL CHECK (available_seats >= 0),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(2.3ms)
+    [observer]	CREATE TABLE bookings (
+    [observer]	  id uuid DEFAULT gen_random_uuid() NOT NULL,
+    [observer]	  customer_name text NOT NULL,
+    [observer]	  seat_count integer NOT NULL,
+    [observer]	  event_id text NOT NULL,
+    [observer]	  FOREIGN KEY (event_id) REFERENCES events (id),
+    [observer]	  PRIMARY KEY (id)
+    [observer]	);	(3.2ms)
+    [observer]	BEGIN	(0.6ms)
+    [observer]	INSERT INTO "events" ("id", "available_seats") VALUES ('event_a', 3) RETURNING "id"	(1.8ms)
+    [observer]	COMMIT	(1.3ms)
+    [observer]	BEGIN	(0.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Alice', 1, 'event_a') RETURNING "id"	(1.7ms)
+    [observer]	COMMIT	(0.9ms)
+    [observer]	BEGIN	(0.6ms)
+    [observer]	INSERT INTO "bookings" ("customer_name", "seat_count", "event_id") VALUES ('Bob', 2, 'event_a') RETURNING "id"	(1.1ms)
+    [observer]	COMMIT	(0.9ms)
+         [bob]		BEGIN ISOLATION LEVEL READ COMMITTED	(0.7ms)
+       [alice]			BEGIN ISOLATION LEVEL READ COMMITTED	(2.3ms)
+       [alice]			UPDATE "bookings" SET "seat_count" = 2 WHERE "bookings"."customer_name" = 'Alice'	(2.3ms)
+         [bob]		SELECT SUM("bookings"."seat_count") FROM "bookings" WHERE "bookings"."customer_name" IN ('Alice', 'Bob')	(2.5ms)
+         [bob]		=> 3
+         [bob]		COMMIT	(1.1ms)
+       [alice]			UPDATE "bookings" SET "seat_count" = 1 WHERE "bookings"."customer_name" = 'Bob'	(1.2ms)
+       [alice]			COMMIT	(2.2ms)
+    [observer]	SELECT SUM("bookings"."seat_count") FROM "bookings"	(1.2ms)
+    [observer]	=> 3
+    [observer]	DROP TABLE IF EXISTS bookings;	(9.3ms)
+    [observer]	DROP TABLE IF EXISTS events;	(3.1ms)

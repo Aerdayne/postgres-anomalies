@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:17.0-alpine
+    container_name: postgres-anomalies-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: postgres_anomalies_test
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5498:5432"
+
+  postgres-anomalies-test-suite:
+    image: ruby:3.4.1
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    tty: true
+    stdin_open: true
+    environment:
+      APP_ENV: test
+      DB_HOST: postgres-anomalies-postgres-test
+      DB_PORT: 5432
+    volumes:
+      - .:/postgres_anomalies
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
